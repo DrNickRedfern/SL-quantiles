@@ -9,3 +9,5 @@ In this article I illustrate the use of quantiles as a means of describing and c
 ---
 
 In this tutorial I demonstrate the code used in my article so that those who would like to use quantile-based methods in their own research into shot length distributions may do so. The data used in my article is also avilable in the Data folder of this repository.
+
+Access the tutorial at [https://rpubs.com/nr62_rp33/SL-quantiles](https://rpubs.com/nr62_rp33/SL-quantiles).
