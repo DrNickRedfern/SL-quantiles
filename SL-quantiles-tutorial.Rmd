@@ -1,0 +1,473 @@
+---
+title: "Quantile analysis of motion picture shot lengths"
+author: "Nick Redfern"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+<br>
+This tutorial accompanies my article 'Distributional thinking about film style: quantile comparisons of motion picture shot length data.'
+
+***
+**Abstract**
+
+In this article I illustrate the use of quantiles as a means of describing and comparing motion picture shot length distributions. This approach is conceptually and computationally simple and leads us to think distributionally about shot lengths rather than focussing on individual values. The result is a better understanding of how this element of film style of two (or more) films differs.
+
+***
+
+In this tutorial I demonstrate the code used in my article so that those who would like to use quantile-based methods in their own research into shot length distributions may do so.
+
+The [GitHub repository](https://github.com/DrNickRedfern/SL-quantiles) for this tutorial contains the shot length data used.
+
+# Packages
+In this tutorial we will use five packages.
+
+The [pacman](http://trinker.github.io/pacman/vignettes/Introduction_to_pacman.html) package installs (if they are not already installed) the other packages, and loads them into the workspace.
+
+```{r load-packages}
+# If the pacman package is not already installed on your computer un-comment the following line and run
+# install.packages("pacman")
+
+# Load the required packages
+pacman::p_load(Hmisc, ggridges, tidyverse, viridis)
+```
+
+The table below summarises the use of these packages in this tutorial.
+
+| Package | Description |
+| :------ | :---------- |
+| [Hmisc](http://math.furman.edu/~dcs/courses/math47/R/library/Hmisc/html/Overview.html)   | Calculate the quantiles of a film's shot lengths |
+| [ggridges](https://cran.r-project.org/web/packages/ggridges/vignettes/introduction.html) | Visualise multiple distributions on a single axis |
+| [tidyverse](https://www.tidyverse.org) | Data wrangling and plotting |
+| [viridis](https://cran.r-project.org/web/packages/viridis/vignettes/intro-to-viridis.html) | Colour schemes for plotting |
+
+# Quantiles
+A [quantile](https://en.wikipedia.org/wiki/Quantile) $Q_{p}$ is a cut point dividing a data set arranged from the smallest to the largest value so that a specified proportion of data points $p$ is less than or equal to that point.
+
+$$
+Q_{p} = \{Pr(X \leq x) = p\}
+$$
+
+We can calculate a quantile for any value of $p$, but commonly used quantiles include the [median](https://en.wikipedia.org/wiki/Median) ($Q_{0.5}$), which divides a data set into two equal parts, and the lower ($Q_{0.25}$) and upper ($Q_{0.75}$) [quartiles](https://en.wikipedia.org/wiki/Quartile) that cut off the lower and upper 25% of a data set, respectively.
+
+Quantiles can be used to describe the shape of a distribution in terms of its asymmetry or [skewness](https://en.wikipedia.org/wiki/Skewness):
+
+$$
+S = \frac{Q_{0.25} + Q_{0.75} - 2Q_{0.5}}{Q_{0.75} - Q_{0.25}}
+$$
+
+and its [kurtosis](https://en.wikipedia.org/wiki/Kurtosis), which describes how much of the data is in the tails of the distribution relative to the centre:
+
+$$
+T = \frac{(Q_{0.875} - Q_{0.625}) + (Q_{0.375} - Q_{0.125})}{Q_{0.75} - Q_{0.25}}
+$$
+
+To calculate the [Harrell-Davis quantiles](https://garstats.wordpress.com/2016/06/09/the-harrell-davis-quantile-estimator/) of the shot length data for each film we will us the `hdquantile()` function from the Hmisc package.
+
+# Comparing shot lengths in two films
+
+The shot length data of *You're Darn Tootin'* (1928) and *Hog Wild* (1930) is available on the GitHub repository of this tutorial as a csv file in the `Data` folder. To read this data directly from GitHub we run the following code:
+
+```{r load-LH-SL-data}
+# Note that the URL must point to the raw version of the data and not the display version
+df_LH <- read_csv("https://raw.githubusercontent.com/DrNickRedfern/SL-quantiles/main/Data/SL-quantiles-Figure-1.csv")
+```
+
+We can inspect the top of the data frame `df_figure1` using the `head()` function.
+
+```{r head-LH-SL-data}
+head(df_LH)
+```
+
+## Summarise the shot length data
+To get a quantile summary of the shot length data of each film we can create a simple function that takes a vector of shot lengths as an input and returns a list of values that includes the number of shots in a film, the average ([mean](https://en.wikipedia.org/wiki/Mean)) shot length, the [five-number summary](https://en.wikipedia.org/wiki/Five-number_summary) of the data set (the minimum, lower quartile, median, upper quartile, and maximum shot lengths), the [interquartile range](https://en.wikipedia.org/wiki/Interquartile_range), and the quantile-based measures of skewness ($S$) and kurtosis ($T$) defined above.
+
+```{r SL-summary}
+# The input to the function is a vector containing the shot lengths for a film
+SL_summary <- function(x){
+  
+  # Check to see if the Hmisc package is installed
+  if (!require("Hmisc")) 
+    stop(print("This function requires the Hmisc package to be installed."))
+  
+  # Calculate the quantiles required to produce the summaries of the data
+  q <- Hmisc::hdquantile(x, probs = seq(0.125, 0.875, 0.125), na.rm = TRUE, 
+                         names = FALSE, se = FALSE, weights = FALSE)
+  
+  # create a list containing the output values
+  SL_sum <- list(`Shots (N)` = round(length(x), 0),
+             `Mean (s)` = round(mean(x), 1),
+             `Minimum (s)` = min(x),
+             `Lower quantile (s)` = round(q[2], 1),
+             `Median (s)` = round(q[4], 1),
+             `Upper quantile (s)` = round(q[6], 1),
+             `Maximum (s)` = max(x),
+             `Interquartile range` = round(q[6] - q[2], 1),
+             `Quantile skewness` = round((q[2] + q[6] - (2 * q[4]))/(q[6] - q[2]), 2),
+             `Quantile kurtosis` = round(((q[7] - q[5]) + (q[3] - q[1]))/(q[6] - q[2]), 2))
+  
+}
+```
+
+Next, we apply the `SL_summary()` function to the data for each and rearrange the result so it will display nicely.
+
+```{r LH-summary, eval = FALSE}
+df_LH %>% 
+  # apply the SL_summary function to each film
+  group_by(film) %>%
+  group_modify(~{.x %>% 
+      map_dfc(SL_summary)}) %>%  
+  # rearrange the result
+  tibble() %>% 
+  column_to_rownames(var = "film") %>%
+  t()
+```
+
+```{r display-LH-summary, echo = FALSE}
+knitr::kable(df_LH %>% 
+  # apply the SL_summary function to each film
+  group_by(film) %>%
+  group_modify(~{.x %>% 
+      map_dfc(SL_summary)}) %>%  
+  # rearrange the result
+  tibble() %>% 
+  column_to_rownames(var = "film") %>%
+  t(), 
+  format = "html", table.attr = "style='width:50%;'") %>%
+  kableExtra::kable_styling("striped", full_width = TRUE)
+```
+
+## Plotting the kernel densities
+Now we can plot the [kernel densities](https://en.wikipedia.org/wiki/Kernel_density_estimation) of the two films in order to compare their respective distributions. In the example below I have set the bandwidth of the density function (`bw`) to 0.1.
+
+```{r LH-kernel-density-plot, fig.align = 'center', fig.cap = "Figure 1: Kernel density estimates of shot length distributions of two Laurel and Hardy films: *You’re Darn Tootin’* (1928) and *Hog Wild* (1930)."}
+# Plot the kernel densities of the two films
+ggplot(data = df_LH, aes(x = values, fill = film)) +
+  geom_density(bw = 0.1, alpha = 0.8, trim = FALSE) +
+  scale_x_continuous(limits = c(0.1, 100), breaks = c(0.1, 1, 10, 100), 
+                     minor_breaks = c(seq(0.2, 0.9, 0.1), seq(2, 9, 1), seq(20, 90, 10)), 
+                     trans = "log10") +
+  scale_y_continuous(breaks = seq(0, 1, 0.25)) +
+  labs(x = "Shot length (s)", y = "Density") +
+  scale_fill_manual(name = NULL, values = c("#440154", "#21908C")) +
+  theme(legend.position = "bottom",
+        axis.title = element_text(size = 10,face = "bold"),
+        plot.title = element_text(size = 10),
+        panel.background = element_rect(fill = "gray85"))
+```
+
+## Calculate and plot the quantiles
+To compare the quantiles of the shot lengths of the two films, we first need to calculate the quantiles. We will calculate the quantiles at from $Q_{0.05}$ to $Q_{0.95}$ at intervals of 0.05.
+
+```{r LH-quantiles}
+df_LH_quantiles <- df_LH %>%
+  group_by(film) %>%
+  group_modify(~ {
+     round(hdquantile(.x$values, probs = seq(0.05, 0.95, 0.05), na.rm = TRUE, 
+                      names = FALSE, se = FALSE, weights = FALSE), 1) %>%
+     enframe(name = "quantile", value = "SL")
+  }) %>%
+  mutate(quantile = seq(0.05, 0.95, 0.05))
+```
+
+```{r display-LH-quantiles, echo = FALSE}
+knitr::kable(head(df_LH_quantiles), format = "html", table.attr = "style='width:50%;'") %>%
+  kableExtra::kable_styling("striped", full_width = TRUE)
+```
+
+Next we plot the quantile profiles for each film.
+
+```{r LH-quantile-profile, fig.align = 'center', fig.cap = "Figure 2A: The quantile profiles for two Laurel and Hardy films"}
+ggplot(data = df_LH_quantiles, aes(x = quantile, y = SL, group = film)) +
+  geom_line(aes(colour = film)) +
+  geom_point(aes(colour = film)) +
+  scale_x_continuous(breaks = seq(0.1, 0.9, 0.1)) +
+  scale_y_continuous(trans = "log10", limits = c(0.9, 30), 
+                     breaks = c(1, 10, 30), minor_breaks= c(seq(2, 9, 1), 20)) +
+  labs(title = "Quantile profiles", x ="Quantile", y = " Shot length (s)") +
+  scale_colour_manual(name = NULL, values = c("#440154", "#21908C")) +
+  theme(legend.position = "bottom",
+        axis.title = element_text(size = 10, face = "bold"),
+        plot.title = element_text(size = 12, face = "bold"),
+        panel.background = element_rect(fill = "gray85"))
+```
+
+To calculate the difference between quantiles of each film we re-arrange the data to a [wide format](https://tavareshugo.github.io/r-intro-tidyverse-gapminder/09-reshaping/index.html). The differences are calculated by subtracting the value of each quantile for *You’re Darn Tootin’* from those of *Hog Wild*, so that negative differences indicate quantiles for which shots in *You’re Darn Tootin’* tend to be of greater duration and positive differences identify quantiles when shots in *Hog Wild* tend to be longer.
+
+```{r LH-quantile-difference}
+df_LH_quantile_diff <- df_LH_quantiles %>% 
+  pivot_wider(names_from = film, values_from = SL) %>%
+  mutate(diff = .[[2]] - .[[3]])
+```
+
+```{r display-LH-quantile-difference, echo = FALSE}
+knitr::kable(head(df_LH_quantile_diff), format = "html", table.attr = "style='width:50%;'") %>%
+  kableExtra::kable_styling("striped", full_width = TRUE)
+```
+
+Now we plot the result.
+
+```{r LH-quantile-diff-plot, fig.align = 'center', fig.cap = "Figure 2B: Quantile differences for two Laurel and Hardy films."}
+ggplot(data = df_LH_quantile_diff,
+                    aes(x = quantile, y = diff, label = sprintf("%0.1f", round(diff, digits = 1)))) +
+  geom_point(aes(colour = diff), size = 8, show.legend = FALSE) +
+  geom_text(colour = "white", size = 2.4, fontface = "bold") +
+  scale_colour_gradient(low = "#21908C", high = "#440154") +
+  scale_x_continuous(breaks = seq(0.1, 0.9, 0.1,)) +
+  scale_y_continuous(breaks = c(-2, 0, 2, 4), 
+                     labels = sprintf("%0.1f", round(c(-2, 0, 2, 4), digits = 1))) +
+  expand_limits(y = c(-2,5)) +
+  labs(title = "Quantile differences", x = "Quantile", y = "Quantile difference (s)") +
+  theme(axis.title = element_text(size = 10, face = "bold"),
+        plot.title = element_text(size = 12, face = "bold"),
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_rect(fill = "gray85"))
+```
+
+# Comparing shot lengths in two groups of films
+In this part of the tutorial we will use the [early Hitchcock shot length data](https://doi.org/10.5281/zenodo.4871227), which includes shot length data for four silent (*The Ring* (1927), *The Farmer’s Wife* (1928), *Champagne* (1928), and *The Manxman* (1929)) and five sound films (*Blackmail* (1929), *Murder!* (1930), *The Skin Game* (1931), *Rich and Strange* (1931), *Number Seventeen* (1932)) directed by Alfred Hitchcock. 
+
+First, we need to load the data from GitHub.
+
+```{r load-Hitchcock-SL-data}
+# Note that the URL must point to the raw version of the data and not the display version
+df_Hitchcock <- read_csv("https://raw.githubusercontent.com/DrNickRedfern/SL-quantiles/main/Data/SL-quantiles-Hitchcock_SL.csv")
+
+head(df_Hitchcock)
+```
+
+We need to re-arrange the data so it is in a [long format](https://tavareshugo.github.io/r-intro-tidyverse-gapminder/09-reshaping/index.html).
+
+```{r pivot-Hitchcock-data}
+df_Hitchcock <- df_Hitchcock %>% 
+  pivot_longer(cols = 1:9, names_to = "film", values_to = "SL", values_drop_na = TRUE) %>%
+  arrange(film)
+```
+
+```{r display-pivot-Hitchcock-data, echo = FALSE}
+knitr::kable(head(df_Hitchcock), format = "html", table.attr = "style='width:50%;'") %>%
+  kableExtra::kable_styling("striped", full_width = TRUE)
+```
+
+## Summarise the shot length data
+To summarise the shot length data we apply the `SL_summary` function we created earlier.
+
+```{r test-function-Hitchcock, eval = FALSE}
+df_Hitchcock %>%
+  # apply the SL_summary function to each film
+  group_by(film) %>%
+  group_modify(~{.x %>%
+      map_dfc(SL_summary)}) %>%
+  # rearrange the result
+  tibble() %>%
+  column_to_rownames(var = "film") %>%
+  t()
+```
+
+```{r display-test-function-Hitchcock, echo = FALSE}
+knitr::kable(df_Hitchcock %>%
+  # apply the SL_summary function to each film
+  group_by(film) %>%
+  group_modify(~{.x %>% 
+      map_dfc(SL_summary)}) %>%
+  # rearrange the result
+  tibble() %>%
+  column_to_rownames(var = "film") %>%
+  t()) %>%
+  kableExtra::kable_styling("striped", full_width = T, font_size = 12) %>%
+  kableExtra::row_spec(0, align = "right", extra_css = "width = 40px; padding: 4px;") %>%
+  kableExtra::column_spec(1, width = "10em")
+```
+
+## Plot the distributions
+We want to identify films as being either silent films or sound films so that we can compare differences between groups. We will also set the titles of the films as factors to plot int he correct order.
+
+```{r Hithcock-classify}
+# Classify the films
+df_Hitchcock <- df_Hitchcock %>% mutate(type = ifelse(film %in% c("The Ring (1927)", 
+                                                                  "The Manxman (1929)", 
+                                                                  "The Farmers Wife (1928)",
+                                                                  "Champagne (1928)"),
+                                                      "Silent", "Sound"))
+
+# # Set film titles as factor
+df_Hitchcock$film <- factor(df_Hitchcock$film,
+                            levels = c("The Ring (1927)",
+                                       "The Farmers Wife (1928)",
+                                       "Champagne (1928)",
+                                       "The Manxman (1929)",
+                                       "Blackmail (1929)",
+                                       "Murder (1930)",
+                                       "The Skin Game (1931)",
+                                       "Rich and Strange (1931)",
+                                       "Number Seventeen (1932)"))
+```
+
+```{r display-Hithcock-classify, echo = FALSE}
+knitr::kable(head(df_Hitchcock), format = "html", table.attr = "style='width:50%;'") %>%
+  kableExtra::kable_styling("striped", full_width = TRUE)
+```
+
+To compare the distribution of shot lengths in these films we can use the `ggridges` package to plot the kernel densities on a single x-axis for easy comparison, with the median and upper and lower quartiles added for reference.
+
+```{r Hitchcock-ridge-plot, fig.align = "center", fig.height = 7, fig.cap = "Figure 3: Shot length distributions of films directed by Alfred Hitchcock, 1927-1932. The quantile lines in each density plot show the lower quartile, median, and upper quartile of each distribution."}
+ggplot(data = df_Hitchcock, aes(x = SL, y = reorder(film, desc(film)), fill = type)) + 
+  geom_density_ridges(scale = 1, quantile_lines = TRUE, alpha = 0.8) +
+  scale_x_continuous(expand = c(0.01, 0), breaks = c(0.1, 1, 10, 100), 
+                     minor_breaks = c(seq(0.02, 0.09, 0.01), 
+                                      seq(0.2, 0.9, 0.1), 
+                                      seq(2, 9, 1), 
+                                      seq(20, 90, 10), 
+                                      seq(200, 900, 100)),
+                     labels = c("0.1", "1.0", "10.0", "100.0"), trans = "log10") +
+  scale_y_discrete(expand = c(0.01, 0)) +
+  scale_fill_manual(name = NULL, values = c("#440154", "#21908C")) +
+  xlab("\nShot length (s)") +
+  theme(legend.position = "bottom", 
+        axis.title.y = element_blank(),
+        axis.title = element_text(size = 10,face = "bold"),
+        panel.background = element_rect(fill = "gray85"))
+```
+
+## Compare the quantiles
+Moving on to the quantile-based comparison of the shot length distributions, we need to calculate the quantiles for each film. As before, we will calculate the quantiles from $Q_{0.05}$ to $Q_{0.95}$ with steps of 0.05.
+
+```{r Hitchcock-quantiles}
+df_Hitchcock_quantiles <- df_Hitchcock %>%
+  group_by(film) %>%
+  group_modify(~ { 
+   round(hdquantile(.x$SL, probs = seq(0.05, 0.95, 0.05), na.rm = TRUE,
+                    names = FALSE, se = FALSE, weights = FALSE), 1) %>%
+      enframe(name = "quantile", value = "SL")
+  }) %>%
+  mutate(type = ifelse(film %in% c("The Ring (1927)", 
+                                   "The Manxman (1929)", 
+                                   "The Farmers Wife (1928)", 
+                                   "Champagne (1928)"), 
+                       "Silent", "Sound"),
+         quantile = seq(0.05, 0.95, 0.05))
+```
+
+```{r display-Hitchcock-quantiles, echo = FALSE}
+knitr::kable(head(df_Hitchcock_quantiles), format = "html", table.attr = "style='width:50%;'") %>%
+  kableExtra::kable_styling("striped", full_width = TRUE)
+```
+
+To plot the quantile profiles of the silent and sound films:
+
+```{r Hitchcock-quanitle-profiles, fig.align = "center", fig.cap = "Figure 4A: Quantile profiles of shot length distributions of films directed by Alfred Hitchcock, 1927-1932."}
+# create plot
+ggplot(data = df_Hitchcock_quantiles, aes(x = quantile, y = SL, group = film)) +
+  geom_line(aes(colour = factor(type))) +
+  geom_point(aes(colour = factor(type))) +
+  scale_x_continuous(breaks = seq(0.1, 0.9, 0.1)) +
+  scale_y_continuous(trans = "log10", limits = c(0.5, 100), 
+                     breaks = c(1, 10, 100), 
+                     minor_breaks= c(seq(0.2, 0.9, 0.1), seq(2, 9, 1), seq(20, 90, 10))) +
+  labs(title = "Quantile profiles", x ="Quantile", y = " Shot length (s)") +
+  scale_colour_manual(name = NULL, values = c("#440154", "#21908C")) +
+  theme(legend.position = "bottom",
+        axis.title = element_text(size = 10, face = "bold"),
+        plot.title = element_text(size = 12, face = "bold"),
+        panel.background = element_rect(fill = "gray85"))
+```
+
+To plot the differences of the quantiles between the two groups of films, we need to calculate the difference of each quantile $Q_{p}$ in the silent films from the corresponding quantiles ($Q_{p}$) of the sound films.
+
+First, we need to split the data into silent and sound films and re-arrange the new data frames into a wide format.
+
+```{r Hitchcock-split-groups}
+# Split the data frame containing th quantiles for each Hitchcock film into silent and sound films
+df_split <- df_Hitchcock_quantiles %>% 
+  group_by(type) %>% 
+  group_split()
+
+# Create data frames for each type of film and re-arrange to a wide format
+df_Hitchcock_silent <- df_split[[1]] %>% 
+  pivot_wider(names_from = quantile, values_from = SL)
+
+df_Hitchcock_sound <- df_split[[2]] %>% 
+  pivot_wider(names_from = quantile, values_from = SL)
+```
+
+```{r display-Hitchcock-split-groups, echo = FALSE}
+knitr::kable(head(df_Hitchcock_sound, 3), format = "html") %>%
+  kableExtra::kable_styling("striped", full_width = TRUE, font_size = 12) %>%
+  kableExtra::column_spec(1, width = "15em")
+```
+
+The function to calculate the pairwise quantile differences, `qdiff`, is simple. The function takes two matrices of quantiles as inputs and assumes the matrices have equal shapes and that the step in the quantiles are equal. The argument `p` is the step increase for the quantiles, which in this case is 0.05.
+
+```{r qdiff-function}
+qdiff <- function(x, y, p = 0.05){
+
+  df <- data.frame()
+  for (i in 1:dim(x)[2]){
+    diff <- as.vector(outer(x[, i], y[, i], '-'))
+    q <- i * p
+    df_a <- cbind(rep(q, length(diff)), diff)
+    df <- rbind(df, df_a)
+  }
+  colnames(df) <- c("quantile", "difference")
+  return(df)
+  
+}
+
+```
+
+To apply the `qdiff` function to the data for silent and sound films we first drop the columns containing the film title and type because these will not be used in the calculations and convert the data format to a matrix, the input type expected by the function.
+
+```{r Hitchcock-quantile-differences}
+# Arrange the data and convert to matrix
+df_Hitchcock_silent <- df_Hitchcock_silent %>%
+  select(-c(film, type)) %>%
+  as.matrix()
+
+df_Hitchcock_sound <- df_Hitchcock_sound%>%
+  select(-c(film, type)) %>%
+  as.matrix()
+
+# Calculate the quantile differences
+df_Hitchcock_q_diff <- qdiff(df_Hitchcock_sound, df_Hitchcock_silent)
+```
+
+```{r display-Hitchcock-quantile-differences, echo = FALSE}
+knitr::kable(head(df_Hitchcock_q_diff), format = "html", table.attr = "style='width:50%;'") %>%
+  kableExtra::kable_styling("striped", full_width = TRUE)
+```
+
+Now to plot the distributions of the differences:
+
+```{r Hitchcock-quantile-difference-distributions, fig.align = "center", fig.cap = "Figure 4B: Difference distributions for pairwise differences between quantiles of shot length distributions of films directed by Alfred Hitchcock, 1927-1932. Positive differences indicate that quartiles the sound films in the sample are higher than those of the silent films."}
+ggplot(data = df_Hitchcock_q_diff, 
+       aes(x = difference, group = as.factor(quantile), colour = as.factor(quantile))) +  
+  geom_density(size = 0.6) + 
+  labs(title = "Quantile differences", x = "Difference (s)", y = "Density") +
+  scale_x_continuous(limits = c(-10, 90), breaks = seq(-10, 90, 10)) + 
+  scale_y_continuous(limits = c(0, 1.25), breaks = seq(0, 1.25, 0.25)) +
+  scale_colour_viridis(name = "Quantile", 
+                       labels = c("0.05","0.10","0.15","0.20","0.25","0.30","0.35",
+                                  "0.40","0.45","0.50","0.55","0.60","0.65","0.70",
+                                  "0.75","0.80", "0.85","0.90", "0.95"), 
+                       discrete = TRUE, direction = -1) +
+  guides(colour = guide_legend(ncol = 2)) +
+  theme(legend.key.width = unit(0.6, "cm"), 
+        legend.key.height = unit(0.4, "cm"),
+        legend.position = c(0.75, 0.595),
+        legend.title = element_text(size = 10), 
+        panel.grid.minor = element_blank(),
+        axis.title = element_text(size = 10, face = "bold"),
+        plot.title = element_text(size = 12, face = "bold"),
+        panel.background = element_rect(fill = "gray85"))
+```
+
+# Summary
+If our goal is to understand differences in shot lengths as differences in style between films, the quantile approach described in my article and demonstrated in this tutorial is simple and intuitive to understand and accurately describes the nature of the differences between these shot length distributions and the size of those differences. 
+<br>
+<br>
